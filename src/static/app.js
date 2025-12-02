@@ -23,31 +23,56 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const spotsLeft = details.max_participants - details.participants.length;
 
-        // Build participants HTML
-        let participantsHTML = "";
-        if (Array.isArray(details.participants) && details.participants.length > 0) {
-          const items = details.participants
-            .map((p) => `<li class="participant-item"><span class="participant-email">${p}</span></li>`)
-            .join("");
-          participantsHTML = `
-            <div class="participants">
-              <strong>Participants (${details.participants.length}):</strong>
-              <ul class="participants-list">
-                ${items}
-              </ul>
-            </div>
-          `;
-        } else {
-          participantsHTML = `<p class="no-participants">No participants yet — be the first!</p>`;
-        }
-
+        // Build activity static details
         activityCard.innerHTML = `
           <h4>${name}</h4>
           <p>${details.description}</p>
           <p><strong>Schedule:</strong> ${details.schedule}</p>
           <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
-          ${participantsHTML}
         `;
+
+        // Build participants DOM with delete buttons
+        if (Array.isArray(details.participants) && details.participants.length > 0) {
+          const participantsDiv = document.createElement('div');
+          participantsDiv.className = 'participants';
+
+          const strong = document.createElement('strong');
+          strong.textContent = `Participants (${details.participants.length}):`;
+          participantsDiv.appendChild(strong);
+
+          const ul = document.createElement('ul');
+          ul.className = 'participants-list';
+
+          const sortedParticipants = [...details.participants].sort();
+
+          sortedParticipants.forEach((p) => {
+            const li = document.createElement('li');
+            li.className = 'participant-item';
+
+            const span = document.createElement('span');
+            span.className = 'participant-email';
+            span.textContent = p;
+            li.appendChild(span);
+
+            const btn = document.createElement('button');
+            btn.className = 'delete-participant';
+            btn.setAttribute('data-activity', name);
+            btn.setAttribute('data-email', p);
+            btn.title = 'Unregister participant';
+            btn.textContent = '✖';
+            li.appendChild(btn);
+
+            ul.appendChild(li);
+          });
+
+          participantsDiv.appendChild(ul);
+          activityCard.appendChild(participantsDiv);
+        } else {
+          const p = document.createElement('p');
+          p.className = 'no-participants';
+          p.textContent = 'No participants yet — be the first!';
+          activityCard.appendChild(p);
+        }
 
         activitiesList.appendChild(activityCard);
 
@@ -84,6 +109,7 @@ document.addEventListener("DOMContentLoaded", () => {
         messageDiv.textContent = result.message;
         messageDiv.className = "success";
         signupForm.reset();
+        fetchActivities();
       } else {
         messageDiv.textContent = result.detail || "An error occurred";
         messageDiv.className = "error";
@@ -101,6 +127,42 @@ document.addEventListener("DOMContentLoaded", () => {
       messageDiv.classList.remove("hidden");
       console.error("Error signing up:", error);
     }
+  });
+
+  // Delegate click for delete participant buttons
+  activitiesList.addEventListener('click', async (e) => {
+    if (!e.target.classList.contains('delete-participant')) return;
+
+    const activityName = e.target.getAttribute('data-activity');
+    const email = e.target.getAttribute('data-email');
+
+    if (!activityName || !email) return;
+
+    try {
+      const resp = await fetch(
+        `/activities/${encodeURIComponent(activityName)}/participants?email=${encodeURIComponent(email)}`,
+        { method: 'DELETE' }
+      );
+
+      const result = await resp.json();
+
+      if (resp.ok) {
+        messageDiv.textContent = result.message;
+        messageDiv.className = 'success';
+        // Refresh the list to update counts
+        fetchActivities();
+      } else {
+        messageDiv.textContent = result.detail || 'Failed to remove participant';
+        messageDiv.className = 'error';
+      }
+    } catch (err) {
+      console.error('Error removing participant:', err);
+      messageDiv.textContent = 'Failed to remove participant. Please try again.';
+      messageDiv.className = 'error';
+    }
+
+    messageDiv.classList.remove('hidden');
+    setTimeout(() => messageDiv.classList.add('hidden'), 5000);
   });
 
   // Initialize app
